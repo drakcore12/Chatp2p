@@ -15,6 +15,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v3"
+	"golang.org/x/term"
 )
 
 type SignalMsg struct {
@@ -59,6 +60,10 @@ func initCompleter() {
 			return activeUsers
 		})),
 	)
+}
+
+func clearScreen() {
+	fmt.Print("\033[H\033[2J")
 }
 
 func makePrompt() string {
@@ -167,10 +172,25 @@ func handleSignal(s SignalMsg) {
 }
 
 func main() {
+	clearScreen()
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
-	fmt.Print("Servidor WS [localhost:8080]: ")
+	banner := `
+	╔══════════════════════════════════════════════════╗
+	║           🛰️  ChatP2P - Cliente Terminal          ║
+	║           Desarrollado por Miguel en Go 💬        ║
+	╚══════════════════════════════════════════════════╝
+	`
+
+	color.Yellow(banner)
+	color.Cyan("💡 Este cliente te permite conectarte a otros usuarios en tiempo real.\n")
+	color.Green("➡️  Pasos iniciales:")
+	fmt.Println("   1. Usa /register para crear una cuenta.")
+	fmt.Println("   2. Luego usa /login para ingresar.")
+	fmt.Println("   3. Cuando estés dentro, escribe /help para ver más comandos.")
+
+	fmt.Print("🔌 Servidor WebSocket [localhost:8080]: ")
 	reader := bufio.NewReader(os.Stdin)
 	srv, _ := reader.ReadString('\n')
 	srv = strings.TrimSpace(srv)
@@ -193,7 +213,6 @@ func main() {
 	}
 	defer rl.Close()
 
-	// Registro/Login
 	for {
 		line, err := rl.Readline()
 		if err != nil {
@@ -205,53 +224,74 @@ func main() {
 		}
 		switch parts[0] {
 		case "/register":
-			if len(parts) != 3 {
-				color.Red("Uso: /register <user> <pwd>")
-				continue
-			}
+			fmt.Print("🆕 Nombre de usuario: ")
+			userInput, _ := reader.ReadString('\n')
+			user := strings.TrimSpace(userInput)
+
+			fmt.Print("🔐 Contraseña (oculta): ")
+			passBytes, _ := term.ReadPassword(int(syscall.Stdin))
+			fmt.Println()
+			pass := strings.TrimSpace(string(passBytes))
+
 			ws, _, err = websocket.DefaultDialer.Dial(wsURL, nil)
 			if err != nil {
-				color.Red("Error connect: %v", err)
+				color.Red("Error conectando: %v", err)
 				return
 			}
-			self = parts[1]
-			ws.WriteJSON(SignalMsg{Type: "register", Username: self, Message: parts[2]})
+			self = user
+			ws.WriteJSON(map[string]string{
+				"type":     "register",
+				"username": user,
+				"password": pass,
+			})
+
 			var resp SignalMsg
 			ws.ReadJSON(&resp)
 			if resp.Type != "register-success" {
-				color.Red("Registro fallido: %s", resp.Message)
+				color.Red("❌ Registro fallido: %s", resp.Message)
 				ws.Close()
 				continue
 			}
-			color.Green("Registro exitoso, ahora /login.")
+			color.Green("✅ Registro exitoso. Ahora inicia sesión con /login.")
 
 		case "/login":
-			if len(parts) != 3 {
-				color.Red("Uso: /login <user> <pwd>")
-				continue
-			}
+			fmt.Print("👤 Usuario: ")
+			userInput, _ := reader.ReadString('\n')
+			user := strings.TrimSpace(userInput)
+
+			fmt.Print("🔐 Contraseña (oculta): ")
+			passBytes, _ := term.ReadPassword(int(syscall.Stdin))
+			fmt.Println()
+			pass := strings.TrimSpace(string(passBytes))
+
 			ws, _, err = websocket.DefaultDialer.Dial(wsURL, nil)
 			if err != nil {
-				color.Red("Error connect: %v", err)
+				color.Red("Error conectando: %v", err)
 				return
 			}
-			self = parts[1]
-			ws.WriteJSON(SignalMsg{Type: "login", Username: self, Message: parts[2]})
+			self = user
+			ws.WriteJSON(map[string]string{
+				"type":     "login",
+				"username": user,
+				"password": pass,
+			})
+
 			var resp SignalMsg
 			ws.ReadJSON(&resp)
 			if resp.Type != "login-success" {
-				color.Red("Login fallido: %s", resp.Message)
+				color.Red("❌ Login fallido: %s", resp.Message)
 				ws.Close()
 				continue
 			}
-			color.Green("Login exitoso. ¡Bienvenido, %s!", self)
+			clearScreen()
+			color.Green("✅ Login exitoso. ¡Bienvenido, %s!", self)
 			goto ChatLoop
 
 		case "/exit":
 			return
 
 		default:
-			color.Red("Primero registra o loguea. Usa /register o /login.")
+			color.Red("Primero debes /register o /login.")
 		}
 		rl.SetPrompt(makePrompt())
 	}
@@ -262,6 +302,7 @@ ChatLoop:
 	}
 
 	userListCh := make(chan []string)
+
 	go func() {
 		for {
 			_, raw, err := ws.ReadMessage()
@@ -313,27 +354,31 @@ ChatLoop:
 			continue
 		}
 		switch parts[0] {
-		case "/help":
+		case "/help", "/menu", "7":
 			printHelp()
-		case "/exit":
-			color.Red("Bye!")
+
+		case "/exit", "8":
+			color.Red("\U0001F44B Bye!")
 			return
-		case "/list":
+
+		case "/list", "3":
 			ws.WriteJSON(SignalMsg{Type: "list-users"})
 			users := <-userListCh
-			color.Cyan("Usuarios online:")
+			color.Cyan("\U0001F465 Usuarios online:")
 			for _, u := range users {
 				fmt.Println(" -", u)
 			}
-		case "/to":
-			if len(parts) != 2 {
+
+		case "/to", "4":
+			if len(parts) < 2 {
 				color.Red("Uso: /to <usuario>")
 			} else {
 				currentTo = parts[1]
-				color.Green("Destinatario: %s", currentTo)
+				color.Green("\u2705 Destinatario seleccionado: %s", currentTo)
 			}
-		case "/p2p":
-			if len(parts) != 2 {
+
+		case "/p2p", "5":
+			if len(parts) < 2 {
 				color.Red("Uso: /p2p <usuario>")
 			} else {
 				currentTo = parts[1]
@@ -345,13 +390,20 @@ ChatLoop:
 				pc.SetLocalDescription(offer)
 				ws.WriteJSON(SignalMsg{Type: "signal", SignalType: "offer", To: currentTo, SDP: &offer})
 			}
+
 		default:
 			if strings.HasPrefix(parts[0], "@") && len(parts) > 1 {
 				user := strings.TrimPrefix(parts[0], "@")
 				msg := strings.Join(parts[1:], " ")
-				ws.WriteJSON(Message{From: self, To: user, Content: msg, Type: "text", Timestamp: time.Now()})
+				ws.WriteJSON(Message{
+					From:      self,
+					To:        user,
+					Content:   msg,
+					Type:      "text",
+					Timestamp: time.Now(),
+				})
 			} else {
-				color.Red("Comando desconocido. Usa /help.")
+				color.Red("\u274C Comando desconocido. Usa /help o escribe 7 para ver el men\u00fa.")
 			}
 		}
 		rl.SetPrompt(makePrompt())

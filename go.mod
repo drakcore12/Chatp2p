@@ -7,6 +7,7 @@ require (
 	github.com/fatih/color v1.13.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/pion/webrtc/v3 v3.3.5
+	golang.org/x/term v0.18.0
 )
 
 require (

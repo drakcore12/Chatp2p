@@ -1,26 +1,19 @@
 package common
 
-import (
-	"net"
-)
+import "time"
 
-// Message representa un mensaje entre peers o vía señalización
-// Si no necesitas esta función getLocalIP, elimínala para evitar warnings.
-//
-// type Message struct {
-// 	From      string    `json:"from"`
-// 	To        string    `json:"to"`
-// 	Content   string    `json:"content"`
-// 	Type      string    `json:"type"`
-// 	Timestamp time.Time `json:"timestamp"`
-// }
+// Peer representa un nodo conectado
+// Aunque CLI no lo use directamente, lo dejamos para futuras extensiones.
+type Peer struct {
+	Name   string
+	Active bool
+}
 
-// PeerManager define la interfaz común para manejo de peers
-// (puedes quitar parámetros no usados si no aplican)
-type PeerManager interface {
-	AddPeer(name string, conn net.Conn)
-	RemovePeer(name string)
-	GetPeer(name string) (*Peer, bool)
-	GetActivePeers() []string
-	SendMessage(to string, msg Message) error
+// Message representa un mensaje de chat o señalización
+type Message struct {
+	From      string    `json:"from"`
+	To        string    `json:"to"`
+	Content   string    `json:"content"`
+	Type      string    `json:"type"`
+	Timestamp time.Time `json:"timestamp"`
 }

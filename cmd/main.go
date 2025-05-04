@@ -21,7 +21,7 @@ func main() {
 	username := scanner.Text()
 
 	// Conectar al servidor WebSocket
-	conn, _, err := websocket.DefaultDialer.Dial("ws://127.0.0.1:8080/ws", nil)
+	conn, _, err := websocket.DefaultDialer.Dial("ws://192.168.1.79:8080/ws", nil)
 	if err != nil {
 		fmt.Println("No se pudo conectar al servidor:", err)
 		return

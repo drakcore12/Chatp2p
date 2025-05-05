@@ -354,32 +354,6 @@ func main() {
 			color.Green("✅ Login exitoso. ¡Bienvenido, %s!", self)
 			goto ChatLoop
 
-		case "/chats":
-			if len(parts) == 2 {
-				user := parts[1]
-				msgs, ok := chats[user]
-				if !ok || len(msgs) == 0 {
-					color.Yellow("📭 No hay mensajes con %s.", user)
-					break
-				}
-				color.Magenta("🗂️ Chat con %s:", user)
-				for _, m := range msgs {
-					fmt.Printf("  [%s] %s\n", m.Timestamp.Format("15:04"), m.Content)
-				}
-			} else {
-				if len(chats) == 0 {
-					color.Yellow("📭 No hay mensajes almacenados aún.")
-					break
-				}
-				color.Magenta("📚 Historial de chats:")
-				for user, msgs := range chats {
-					color.Cyan("🗂️  %s:", user)
-					for _, m := range msgs {
-						fmt.Printf("  [%s] %s\n", m.Timestamp.Format("15:04"), m.Content)
-					}
-				}
-			}
-
 		case "/clear":
 			if len(parts) < 2 {
 				color.Red("Uso: /clear <usuario>")
@@ -493,6 +467,32 @@ ChatLoop:
 				}
 				pc.SetLocalDescription(offer)
 				ws.WriteJSON(SignalMsg{Type: "signal", SignalType: "offer", To: currentTo, SDP: &offer})
+			}
+
+		case "/chats":
+			if len(parts) == 2 {
+				user := parts[1]
+				msgs, ok := chats[user]
+				if !ok || len(msgs) == 0 {
+					color.Yellow("📭 No hay mensajes con %s.", user)
+					break
+				}
+				color.Magenta("🗂️ Chat con %s:", user)
+				for _, m := range msgs {
+					fmt.Printf("  [%s] %s\n", m.Timestamp.Format("15:04"), m.Content)
+				}
+			} else {
+				if len(chats) == 0 {
+					color.Yellow("📭 No hay mensajes almacenados aún.")
+					break
+				}
+				color.Magenta("📚 Historial de chats:")
+				for user, msgs := range chats {
+					color.Cyan("🗂️  %s:", user)
+					for _, m := range msgs {
+						fmt.Printf("  [%s] %s\n", m.Timestamp.Format("15:04"), m.Content)
+					}
+				}
 			}
 
 		default:

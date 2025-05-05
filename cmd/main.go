@@ -354,15 +354,6 @@ func main() {
 			color.Green("✅ Login exitoso. ¡Bienvenido, %s!", self)
 			goto ChatLoop
 
-		case "/clear":
-			if len(parts) < 2 {
-				color.Red("Uso: /clear <usuario>")
-				break
-			}
-			delete(chats, parts[1])
-			saveChats() // 👈 actualiza archivo
-			color.Yellow("🧹 Mensajes con %s eliminados.", parts[1])
-
 		case "/chats":
 			if len(parts) == 2 {
 				user := parts[1]
@@ -388,6 +379,15 @@ func main() {
 					}
 				}
 			}
+
+		case "/clear":
+			if len(parts) < 2 {
+				color.Red("Uso: /clear <usuario>")
+				break
+			}
+			delete(chats, parts[1])
+			saveChats()
+			color.Yellow("🧹 Mensajes con %s eliminados.", parts[1])
 
 		case "/exit":
 			return

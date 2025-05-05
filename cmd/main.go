@@ -17,6 +17,8 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v3"
 	"golang.org/x/term"
+
+	"sync"
 )
 
 type SignalMsg struct {
@@ -40,6 +42,7 @@ type Message struct {
 
 var (
 	chats       = make(map[string][]Message) // 🗂️ Almacena mensajes por usuario
+	chatsMux    sync.RWMutex
 	ws          *websocket.Conn
 	self        string
 	currentTo   string
@@ -131,20 +134,14 @@ func setupWebRTC() error {
 		})
 	})
 
-	dc, err = pc.CreateDataChannel("chat", nil)
-	if err != nil {
-		return err
-	}
-	dc.OnOpen(func() {
-		color.Green(">> Canal P2P abierto con %s", currentTo)
-	})
-	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
-		fmt.Printf("%s %s\n",
-			color.CyanString("["+currentTo+"]>"),
-			string(msg.Data),
-		)
-	})
+	// Solo el iniciador crea el DataChannel aquí
+	dc, _ = pc.CreateDataChannel("chat", nil)
 
+	pc.OnDataChannel(func(d *webrtc.DataChannel) {
+		dc = d
+		setDataChannelHandlers()
+	})
+	setDataChannelHandlers()
 	return nil
 }
 
@@ -248,7 +245,7 @@ func main() {
 	╔═════════════════════════════════════════════════╗
 	║            ChatP2P - Cliente Terminal           ║
 	║          Desarrollado por Miguel en Go          ║
-	╚═════════════════════════════════════════════════╝
+	╚═══════════════════════════════════════════════════╝
 	`
 
 	color.Yellow(banner)
@@ -390,13 +387,17 @@ ChatLoop:
 		log.Fatalln("WebRTC setup:", err)
 	}
 
-	userListCh := make(chan []string)
+	userListCh := make(chan []string, 1) // Canal con buffer de tamaño 1
 
 	go func() {
 		for {
 			_, raw, err := ws.ReadMessage()
 			if err != nil {
-				color.Red("WS cerrado: %v", err)
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+					color.Red("Error inesperado en WebSocket: %v", err)
+				} else {
+					color.Yellow("Conexión WebSocket cerrada: %v", err)
+				}
 				os.Exit(1)
 			}
 			var base struct{ Type string }
@@ -414,7 +415,11 @@ ChatLoop:
 				}
 				json.NewDecoder(bytes.NewReader(raw)).Decode(&ul)
 				activeUsers = ul.Users
-				userListCh <- ul.Users
+				select {
+				case userListCh <- ul.Users:
+				default:
+					log.Println("No hay receptor para user-list, ignorando")
+				}
 
 			case "text":
 				var temp struct {
@@ -443,12 +448,15 @@ ChatLoop:
 					Timestamp: t,
 				}
 
-				key := strings.TrimSpace(m.From)
+				key := strings.ToLower(strings.TrimSpace(m.From))
 				if self != "" && m.From == self {
-					key = strings.TrimSpace(m.To)
+					key = strings.ToLower(strings.TrimSpace(m.To))
 				}
 				fmt.Printf("💾 Guardando mensaje bajo clave: %s\n", key)
+				// Al guardar mensajes
+				chatsMux.Lock()
 				chats[key] = append(chats[key], m)
+				chatsMux.Unlock()
 				saveChats()
 				fmt.Printf("[%s]> %s\n", m.From, m.Content)
 				fmt.Printf("📩 Mensaje de %s para %s: %s\n", m.From, m.To, m.Content)
@@ -545,7 +553,7 @@ ChatLoop:
 				color.Magenta("📚 Historial de chats:")
 				fmt.Printf("🧪 Estado actual del historial:\n")
 				for k, v := range chats {
-				fmt.Printf("  Usuario: %s, Mensajes: %d\n", k, len(v))
+					fmt.Printf("  Usuario: %s, Mensajes: %d\n", k, len(v))
 				}
 			}
 
@@ -561,9 +569,34 @@ ChatLoop:
 					Timestamp: time.Now(),
 				})
 			} else {
+				if currentTo != "" {
+					msg := strings.Join(parts, " ")
+					ws.WriteJSON(Message{
+						From:      self,
+						To:        currentTo,
+						Content:   msg,
+						Type:      "text",
+						Timestamp: time.Now(),
+					})
+					continue
+				}
 				color.Red("\u274C Comando desconocido. Usa /help o escribe 7 para ver el men\u00fa.")
 			}
 		}
 		rl.SetPrompt(makePrompt())
 	}
+}
+
+func setDataChannelHandlers() {
+	if dc == nil {
+		return
+	}
+	dc.OnOpen(func() {
+		color.Green(">> Canal P2P abierto con %s", currentTo)
+		rl.SetPrompt(makePrompt())
+	})
+	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
+		fmt.Printf("\n%s %s\n", color.CyanString("["+currentTo+"]>"), string(msg.Data))
+		rl.Refresh()
+	})
 }

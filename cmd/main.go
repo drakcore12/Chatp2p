@@ -405,15 +405,38 @@ ChatLoop:
 				userListCh <- ul.Users
 
 			case "text":
-				var m Message
-				json.NewDecoder(bytes.NewReader(raw)).Decode(&m)
-				log.Printf("📥 Recibido y parseado correctamente: %+v", m)
+				var temp struct {
+					From      string `json:"from"`
+					To        string `json:"to"`
+					Content   string `json:"content"`
+					Type      string `json:"type"`
+					Timestamp string `json:"timestamp"`
+				}
+
+				if err := json.NewDecoder(bytes.NewReader(raw)).Decode(&temp); err != nil {
+					color.Red("❌ Error parseando mensaje: %v", err)
+					break
+				}
+
+				t, err := time.Parse(time.RFC3339, temp.Timestamp)
+				if err != nil {
+					t = time.Now()
+				}
+
+				m := Message{
+					From:      temp.From,
+					To:        temp.To,
+					Content:   temp.Content,
+					Type:      temp.Type,
+					Timestamp: t,
+				}
+
 				key := m.From
 				if m.From == self {
 					key = m.To
 				}
 				chats[key] = append(chats[key], m)
-				saveChats() // 👈 guarda en disco
+				saveChats()
 				fmt.Printf("[%s]> %s\n", m.From, m.Content)
 				fmt.Printf("📩 Mensaje de %s para %s: %s\n", m.From, m.To, m.Content)
 

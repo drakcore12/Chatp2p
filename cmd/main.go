@@ -388,6 +388,9 @@ ChatLoop:
 			}
 			var base struct{ Type string }
 			json.Unmarshal(raw, &base)
+			fmt.Println("📦 Mensaje crudo recibido:", string(raw))
+
+			fmt.Println("🔧 Recibido tipo:", base.Type)
 			switch base.Type {
 			case "user-list":
 				var ul struct {
@@ -401,9 +404,14 @@ ChatLoop:
 			case "text":
 				var m Message
 				json.Unmarshal(raw, &m)
-				chats[m.From] = append(chats[m.From], m)
+				key := m.From
+				if m.From == self {
+					key = m.To
+				}
+				chats[key] = append(chats[key], m)
 				saveChats() // 👈 guarda en disco
 				fmt.Printf("[%s]> %s\n", m.From, m.Content)
+				fmt.Printf("📩 Mensaje de %s para %s: %s\n", m.From, m.To, m.Content)
 
 			case "signal":
 				var s SignalMsg

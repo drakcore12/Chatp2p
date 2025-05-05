@@ -38,6 +38,7 @@ type Message struct {
 }
 
 var (
+	chats       = make(map[string][]Message) // 🗂️ Almacena mensajes por usuario
 	ws          *websocket.Conn
 	self        string
 	currentTo   string
@@ -83,6 +84,8 @@ func printHelp() {
 	fmt.Println("  /p2p <user>            - Inicia chat P2P directo (WebRTC)")
 	fmt.Println("  @user <msg>            - Envía mensaje via servidor")
 	fmt.Println("  /exit                  - Salir")
+	fmt.Println("  /chats [user]          - Muestra historial de chats (todos o por usuario)")
+	fmt.Println("  /clear <user>          - Borra historial de un usuario")
 }
 
 func setupWebRTC() error {
@@ -144,22 +147,66 @@ func setupWebRTC() error {
 	return nil
 }
 
+func chatP2PLoop() {
+	color.Green("🟢 Estás en modo P2P con %s. Escribe mensajes libremente.", currentTo)
+	color.Yellow("✏️ Escribe '/exit' para salir del modo P2P.")
+
+	for {
+		line, err := rl.Readline()
+		if err != nil {
+			break
+		}
+		line = strings.TrimSpace(line)
+		if line == "/exit" {
+			color.Red("🚪 Saliste del modo P2P con %s.", currentTo)
+			currentTo = ""
+			return
+		}
+		if dc != nil && dc.ReadyState() == webrtc.DataChannelStateOpen {
+			dc.SendText(line)
+			fmt.Printf("[Tú -> %s] %s\n", currentTo, line)
+		} else {
+			color.Red("❌ El canal P2P no está disponible.")
+			return
+		}
+	}
+}
+
 func handleSignal(s SignalMsg) {
 	switch s.SignalType {
 	case "offer":
-		pc.SetRemoteDescription(*s.SDP)
-		answer, err := pc.CreateAnswer(nil)
-		if err != nil {
-			log.Println("CreateAnswer error:", err)
-			return
+		fmt.Printf("\n🔔 Solicitud de conexión P2P de %s. ¿Aceptar? [s/n/b] ", s.Username)
+		reader := bufio.NewReader(os.Stdin)
+		resp, _ := reader.ReadString('\n')
+		resp = strings.ToLower(strings.TrimSpace(resp))
+
+		switch resp {
+		case "s":
+			pc.SetRemoteDescription(*s.SDP)
+			answer, err := pc.CreateAnswer(nil)
+			if err != nil {
+				log.Println("CreateAnswer error:", err)
+				return
+			}
+			pc.SetLocalDescription(answer)
+			ws.WriteJSON(SignalMsg{
+				Type:       "signal",
+				SignalType: "answer",
+				To:         s.Username,
+				SDP:        &answer,
+			})
+			currentTo = s.Username
+			go chatP2PLoop()
+
+		case "n":
+			color.Yellow("❌ Conexión rechazada.")
+
+		case "b":
+			color.Red("⛔ Usuario bloqueado. (Implementar lógica de bloqueo si se desea)")
+
+		default:
+			color.Red("⚠️ Respuesta inválida, no se acepta la conexión.")
 		}
-		pc.SetLocalDescription(answer)
-		ws.WriteJSON(SignalMsg{
-			Type:       "signal",
-			SignalType: "answer",
-			To:         s.Username,
-			SDP:        &answer,
-		})
 
 	case "answer":
 		pc.SetRemoteDescription(*s.SDP)
@@ -171,8 +218,28 @@ func handleSignal(s SignalMsg) {
 	}
 }
 
+func saveChats() {
+	file, err := os.Create("chat_history.json")
+	if err != nil {
+		color.Red("❌ No se pudo guardar historial: %v", err)
+		return
+	}
+	defer file.Close()
+	json.NewEncoder(file).Encode(chats)
+}
+
+func loadChats() {
+	file, err := os.Open("chat_history.json")
+	if err != nil {
+		return // No existe, es normal al principio
+	}
+	defer file.Close()
+	json.NewDecoder(file).Decode(&chats)
+}
+
 func main() {
 	clearScreen()
+	loadChats()
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
@@ -287,6 +354,41 @@ func main() {
 			color.Green("✅ Login exitoso. ¡Bienvenido, %s!", self)
 			goto ChatLoop
 
+		case "/clear":
+			if len(parts) < 2 {
+				color.Red("Uso: /clear <usuario>")
+				break
+			}
+			delete(chats, parts[1])
+			saveChats() // 👈 actualiza archivo
+			color.Yellow("🧹 Mensajes con %s eliminados.", parts[1])
+
+		case "/chats":
+			if len(parts) == 2 {
+				user := parts[1]
+				msgs, ok := chats[user]
+				if !ok || len(msgs) == 0 {
+					color.Yellow("📭 No hay mensajes con %s.", user)
+					break
+				}
+				color.Magenta("🗂️ Chat con %s:", user)
+				for _, m := range msgs {
+					fmt.Printf("  [%s] %s\n", m.Timestamp.Format("15:04"), m.Content)
+				}
+			} else {
+				if len(chats) == 0 {
+					color.Yellow("📭 No hay mensajes almacenados aún.")
+					break
+				}
+				color.Magenta("📚 Historial de chats:")
+				for user, msgs := range chats {
+					color.Cyan("🗂️  %s:", user)
+					for _, m := range msgs {
+						fmt.Printf("  [%s] %s\n", m.Timestamp.Format("15:04"), m.Content)
+					}
+				}
+			}
+
 		case "/exit":
 			return
 
@@ -325,6 +427,8 @@ ChatLoop:
 			case "text":
 				var m Message
 				json.Unmarshal(raw, &m)
+				chats[m.From] = append(chats[m.From], m)
+				saveChats() // 👈 guarda en disco
 				fmt.Printf("[%s]> %s\n", m.From, m.Content)
 
 			case "signal":

@@ -360,9 +360,21 @@ func main() {
 				color.Red("Uso: /clear <usuario>")
 				break
 			}
-			delete(chats, parts[1])
+			user := strings.TrimSpace(parts[1])
+			var found bool
+			for k := range chats {
+				if strings.EqualFold(k, user) {
+					delete(chats, k)
+					found = true
+					break
+				}
+			}
+			if !found {
+				color.Yellow("📭 No hay mensajes con %s.", user)
+				break
+			}
 			saveChats()
-			color.Yellow("🧹 Mensajes con %s eliminados.", parts[1])
+			color.Yellow("🧹 Mensajes con %s eliminados.", user)
 
 		case "/exit":
 			return
@@ -431,10 +443,11 @@ ChatLoop:
 					Timestamp: t,
 				}
 
-				key := m.From
+				key := strings.TrimSpace(m.From)
 				if self != "" && m.From == self {
-					key = m.To
+					key = strings.TrimSpace(m.To)
 				}
+				fmt.Printf("💾 Guardando mensaje bajo clave: %s\n", key)
 				chats[key] = append(chats[key], m)
 				saveChats()
 				fmt.Printf("[%s]> %s\n", m.From, m.Content)
@@ -506,15 +519,23 @@ ChatLoop:
 
 		case "/chats":
 			if len(parts) == 2 {
-				user := parts[1]
-				msgs, ok := chats[user]
-				if !ok || len(msgs) == 0 {
+				user := strings.TrimSpace(parts[1])
+				var found bool
+				var msgs []Message
+				for k, v := range chats {
+					if strings.EqualFold(k, user) {
+						msgs = v
+						found = true
+						break
+					}
+				}
+				if !found || len(msgs) == 0 {
 					color.Yellow("📭 No hay mensajes con %s.", user)
 					break
 				}
 				color.Magenta("🗂️ Chat con %s:", user)
 				for _, m := range msgs {
-					fmt.Printf("  [%s] %s\n", m.Timestamp.Format("15:04"), m.Content)
+					fmt.Printf("  [%s] %s: %s\n", m.Timestamp.Format("15:04"), m.From, m.Content)
 				}
 			} else {
 				if len(chats) == 0 {
@@ -522,11 +543,9 @@ ChatLoop:
 					break
 				}
 				color.Magenta("📚 Historial de chats:")
-				for user, msgs := range chats {
-					color.Cyan("🗂️  %s:", user)
-					for _, m := range msgs {
-						fmt.Printf("  [%s] %s\n", m.Timestamp.Format("15:04"), m.Content)
-					}
+				fmt.Printf("🧪 Estado actual del historial:\n")
+				for k, v := range chats {
+				fmt.Printf("  Usuario: %s, Mensajes: %d\n", k, len(v))
 				}
 			}
 

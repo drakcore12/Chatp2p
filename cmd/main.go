@@ -403,7 +403,12 @@ ChatLoop:
 
 			case "text":
 				var m Message
-				json.Unmarshal(raw, &m)
+				if err := json.Unmarshal(raw, &m); err != nil {
+					color.Red("❌ Error parseando mensaje: %v", err)
+					color.Red("Contenido crudo: %s", raw)
+					break
+				}
+				log.Printf("📥 Recibido y parseado correctamente: %+v", m)
 				key := m.From
 				if m.From == self {
 					key = m.To

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,7 +11,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"bytes"
 
 	"github.com/chzyer/readline"
 	"github.com/fatih/color"
@@ -245,10 +245,10 @@ func main() {
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
 	banner := `
-	╔══════════════════════════════════════════════════╗
-	║           🛰️  ChatP2P - Cliente Terminal          ║
-	║           Desarrollado por Miguel en Go 💬        ║
-	╚══════════════════════════════════════════════════╝
+	╔═════════════════════════════════════════════════╗
+	║            ChatP2P - Cliente Terminal           ║
+	║          Desarrollado por Miguel en Go          ║
+	╚═════════════════════════════════════════════════╝
 	`
 
 	color.Yellow(banner)
@@ -432,7 +432,7 @@ ChatLoop:
 				}
 
 				key := m.From
-				if m.From == self {
+				if self != "" && m.From == self {
 					key = m.To
 				}
 				chats[key] = append(chats[key], m)

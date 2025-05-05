@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"bytes"
 
 	"github.com/chzyer/readline"
 	"github.com/fatih/color"
@@ -387,27 +388,25 @@ ChatLoop:
 				os.Exit(1)
 			}
 			var base struct{ Type string }
-			json.Unmarshal(raw, &base)
-			fmt.Println("📦 Mensaje crudo recibido:", string(raw))
-
-			fmt.Println("🔧 Recibido tipo:", base.Type)
+			err = json.NewDecoder(bytes.NewReader(raw)).Decode(&base)
+			if err != nil {
+				log.Printf("❌ Error decodificando tipo de mensaje: %v", err)
+				continue
+			}
+			log.Printf("➡️ Tipo de mensaje detectado: '%s'", base.Type)
 			switch base.Type {
 			case "user-list":
 				var ul struct {
 					Type  string   `json:"type"`
 					Users []string `json:"users"`
 				}
-				json.Unmarshal(raw, &ul)
+				json.NewDecoder(bytes.NewReader(raw)).Decode(&ul)
 				activeUsers = ul.Users
 				userListCh <- ul.Users
 
 			case "text":
 				var m Message
-				if err := json.Unmarshal(raw, &m); err != nil {
-					color.Red("❌ Error parseando mensaje: %v", err)
-					color.Red("Contenido crudo: %s", raw)
-					break
-				}
+				json.NewDecoder(bytes.NewReader(raw)).Decode(&m)
 				log.Printf("📥 Recibido y parseado correctamente: %+v", m)
 				key := m.From
 				if m.From == self {
